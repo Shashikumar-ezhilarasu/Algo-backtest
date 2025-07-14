@@ -1,6 +1,6 @@
 ## About
 
-**Backtest2** is a Python-based backtesting framework designed for analyzing and evaluating trading strategies using historical market and trade data. The project provides tools to simulate trading strategies on options data, enabling users to assess performance, optimize parameters, and gain insights before deploying strategies in live markets.
+**Algo-backtest** is a Python-based backtesting framework designed for analyzing and evaluating trading strategies using historical market and trade data. The project provides tools to simulate trading strategies on options data, enabling users to assess performance, optimize parameters, and gain insights before deploying strategies in live markets.
 
 ### Key Features
 
