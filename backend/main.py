@@ -3,8 +3,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
-from .db import save_strategy, get_strategy
-from .models import BacktestConfig, BacktestResult
+from db import save_strategy, get_strategy
+from models import BacktestConfig, BacktestResult
 from typing import Optional
 from ta.trend import EMAIndicator
 from ta.momentum import RSIIndicator
