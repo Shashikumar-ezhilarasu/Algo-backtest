@@ -1,0 +1,46 @@
+{
+  "app_config": {
+    "title": "Advanced Stock Market Backtesting Platform",
+    "version": "1.0.0",
+    "description": "Comprehensive backtesting platform with advanced features",
+    "author": "Your Team"
+  },
+  "server_config": {
+    "backend_host": "localhost",
+    "backend_port": 8000,
+    "frontend_port": 8501,
+    "frontend_host": "localhost"
+  },
+  "database_config": {
+    "host": "localhost",
+    "database": "newbacktest",
+    "user": "postgres",
+    "password": "300812"
+  },
+  "default_settings": {
+    "stop_loss_pct": 2.0,
+    "target_pct": 4.0,
+    "position_size": 100,
+    "slippage": 0.5,
+    "brokerage": 20.0,
+    "tax_rate": 15.0,
+    "max_loss_per_day": 5000.0,
+    "start_time": "09:15",
+    "end_time": "15:15"
+  },
+  "ui_config": {
+    "theme": "light",
+    "chart_theme": "plotly",
+    "decimal_places": 2,
+    "currency_symbol": "₹",
+    "max_trades_display": 1000
+  },
+  "features": {
+    "trailing_stop": true,
+    "reentry_logic": true,
+    "technical_indicators": true,
+    "risk_management": true,
+    "export_functionality": true,
+    "strategy_management": true
+  }
+}

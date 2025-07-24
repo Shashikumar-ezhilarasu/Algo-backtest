@@ -14,7 +14,14 @@ class BacktestConfig(BaseModel):
     expiry_mode: Optional[str] = None   # 'weekly' or 'monthly'
     start_time: str = '09:15'
     end_time: str = '15:15'
-    # Add more config fields as needed
+    
+    # New fields for realistic trading
+    position_size: int = 100
+    slippage: float = 0.5
+    brokerage: float = 20.0
+    tax_rate: float = 15.0
+    margin_required: float = 50000.0
+    max_loss_per_day: float = 5000.0
 
 class BacktestResult(BaseModel):
     summary: Dict[str, Any]

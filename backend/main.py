@@ -67,6 +67,26 @@ def get_expiry(date, expiry_mode, market_df):
             return thursdays['Date'].iloc[-1]
     return None
 
+def calculate_max_consecutive(trade_log, type_):
+    """Calculate maximum consecutive wins or losses"""
+    if not trade_log:
+        return 0
+    
+    max_consecutive = 0
+    current_consecutive = 0
+    
+    for trade in trade_log:
+        if type_ == 'win' and trade['pnl'] > 0:
+            current_consecutive += 1
+            max_consecutive = max(max_consecutive, current_consecutive)
+        elif type_ == 'loss' and trade['pnl'] <= 0:
+            current_consecutive += 1
+            max_consecutive = max(max_consecutive, current_consecutive)
+        else:
+            current_consecutive = 0
+    
+    return max_consecutive
+
 # Backtest engine
 @app.post("/backtest/run", response_model=BacktestResult)
 def run_backtest(config: BacktestConfig):
@@ -99,7 +119,15 @@ def run_backtest(config: BacktestConfig):
     trade_log = []
     equity_curve = []
     balance = 0
+    daily_pnl = {}
     reentry_tracker = {}
+
+    # Get configuration parameters
+    position_size = getattr(config, 'position_size', 100)
+    slippage = getattr(config, 'slippage', 0.5)
+    brokerage = getattr(config, 'brokerage', 20.0)
+    tax_rate = getattr(config, 'tax_rate', 15.0) / 100
+    max_loss_per_day = getattr(config, 'max_loss_per_day', 5000.0)
 
     # Time filter setup
     start_time = getattr(config, 'start_time', '09:15')
@@ -216,23 +244,53 @@ def run_backtest(config: BacktestConfig):
             if 'exit_price' not in locals():
                 exit_price = market.iloc[j]['Close']
 
-            # Calculate PnL
-            pnl = (exit_price - entry_price) if direction == 'LONG' else (entry_price - exit_price)
-            balance += pnl
+            # Apply slippage
+            if direction == 'LONG':
+                entry_price_with_slippage = entry_price + slippage
+                exit_price_with_slippage = exit_price - slippage
+            else:
+                entry_price_with_slippage = entry_price - slippage
+                exit_price_with_slippage = exit_price + slippage
 
-            # Log trade
+            # Calculate gross PnL
+            gross_pnl = (exit_price_with_slippage - entry_price_with_slippage) * position_size if direction == 'LONG' else (entry_price_with_slippage - exit_price_with_slippage) * position_size
+            
+            # Apply trading costs
+            total_brokerage = brokerage * 2  # Entry + Exit
+            tax_amount = max(0, gross_pnl) * tax_rate if gross_pnl > 0 else 0
+            net_pnl = gross_pnl - total_brokerage - tax_amount
+            
+            # Check daily loss limit
+            current_date = date
+            if current_date not in daily_pnl:
+                daily_pnl[current_date] = 0
+            
+            if daily_pnl[current_date] + net_pnl < -max_loss_per_day:
+                continue  # Skip this trade if it exceeds daily loss limit
+            
+            daily_pnl[current_date] += net_pnl
+            balance += net_pnl
+
+            # Log trade with detailed information
             trade_log.append({
                 'trade_type': f'Entry {direction.lower()}',
                 'entry_price': entry_price,
                 'exit_price': exit_price,
+                'entry_price_with_slippage': entry_price_with_slippage,
+                'exit_price_with_slippage': exit_price_with_slippage,
                 'sl': sl_price,
                 'target': target_price,
                 'trail_price': trail_price if trail_active else None,
-                'pnl': pnl,
+                'gross_pnl': gross_pnl,
+                'brokerage': total_brokerage,
+                'tax': tax_amount,
+                'pnl': net_pnl,
                 'date': date,
                 'time': time,
                 'exit_time': fut_time,
-                'max_profit_pct': max_profit_pct * 100
+                'max_profit_pct': max_profit_pct * 100,
+                'position_size': position_size,
+                'direction': direction
             })
             equity_curve.append(balance)
 
@@ -247,14 +305,42 @@ def run_backtest(config: BacktestConfig):
     winning_trades = [t for t in trade_log if t['pnl'] > 0]
     losing_trades = [t for t in trade_log if t['pnl'] <= 0]
     
+    # Calculate additional metrics
+    total_gross_pnl = sum(t['gross_pnl'] for t in trade_log) if trade_log else 0
+    total_brokerage = sum(t['brokerage'] for t in trade_log) if trade_log else 0
+    total_tax = sum(t['tax'] for t in trade_log) if trade_log else 0
+    
+    # Calculate maximum consecutive wins/losses
+    max_consecutive_wins = calculate_max_consecutive(trade_log, 'win')
+    max_consecutive_losses = calculate_max_consecutive(trade_log, 'loss')
+    
+    # Calculate Sharpe ratio (simplified)
+    if len(equity_curve) > 1:
+        returns = [equity_curve[i] - equity_curve[i-1] for i in range(1, len(equity_curve))]
+        avg_return = sum(returns) / len(returns) if returns else 0
+        std_return = (sum((r - avg_return) ** 2 for r in returns) / len(returns)) ** 0.5 if returns else 0
+        sharpe_ratio = (avg_return / std_return) * (252 ** 0.5) if std_return > 0 else 0
+    else:
+        sharpe_ratio = 0
+    
     summary = {
         'total_pnl': balance,
+        'total_gross_pnl': total_gross_pnl,
+        'total_brokerage': total_brokerage,
+        'total_tax': total_tax,
         'num_trades': len(trade_log),
+        'winning_trades': len(winning_trades),
+        'losing_trades': len(losing_trades),
         'win_rate': len(winning_trades) / len(trade_log) if trade_log else 0,
         'avg_win': sum(t['pnl'] for t in winning_trades) / len(winning_trades) if winning_trades else 0,
         'avg_loss': sum(t['pnl'] for t in losing_trades) / len(losing_trades) if losing_trades else 0,
         'max_drawdown': min(equity_curve) if equity_curve else 0,
-        'profit_factor': abs(sum(t['pnl'] for t in winning_trades) / sum(t['pnl'] for t in losing_trades)) if losing_trades else float('inf')
+        'profit_factor': abs(sum(t['pnl'] for t in winning_trades) / sum(t['pnl'] for t in losing_trades)) if losing_trades else float('inf'),
+        'max_consecutive_wins': max_consecutive_wins,
+        'max_consecutive_losses': max_consecutive_losses,
+        'sharpe_ratio': sharpe_ratio,
+        'total_return_pct': (balance / 100000) * 100 if balance else 0,  # Assuming initial capital of 1 lakh
+        'daily_pnl_stats': daily_pnl
     }
 
     return BacktestResult(

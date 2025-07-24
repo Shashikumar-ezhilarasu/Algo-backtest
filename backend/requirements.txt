@@ -6,4 +6,8 @@ python-multipart
 psycopg2-binary
 sqlalchemy
 openpyxl
-ta 
+ta
+streamlit
+plotly
+requests
+numpy 
